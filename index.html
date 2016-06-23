@@ -4,7 +4,7 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-		<title>reveal.js</title>
+		<title>Django HA</title>
 
 		<link rel="stylesheet" href="css/reveal.css">
 		<link rel="stylesheet" href="css/theme/black.css">
@@ -24,8 +24,179 @@
 	<body>
 		<div class="reveal">
 			<div class="slides">
-				<section>Slide 1</section>
-				<section>Slide 2</section>
+			  <section>
+				<h1>High Available Django Setup</h1>
+				<p>Roland van Laar<p>
+				<p>Entepreneur Education and IT</p>
+				<p><small>
+					twitter: <a href="https://twitter.com/@rvanlaar">@rvanlaar</a>
+				</small>
+				<small>github:
+					<a href="https://github.com/rvanlaar">rvanlaar</a>
+				</small></p>
+			  </section>
+			  <section>
+				<p>Application Demo</p>
+				<p>Goals</p>
+				<p>Challenges</p>
+				<p>Overview</p>
+				<p>BDR</p>
+				<p>CSYNC2</p>
+				<p>WebSockets</p>
+				<p>That one time we were down</p>
+			  </section>
+			  <section>
+				<h1>Demo: EduWorld</h1>
+				<p><a href="https://app.edu-world.nl/#/start">EduWorld</a></p>
+			  </section>
+			  <section>
+				<h1>Customer's Goals</h1>
+				<p>Not expensive</p>
+				<p>Always up</p>
+				<p>Reliable</p>
+			  </section>
+			  <section>
+				<h1>Technical Goals</h1>
+				<small>i.e. My Goals</small>
+				<p>Buildable</p>
+				<p>Functional</p>
+				<p>Maintainable</p>
+			  </section>
+			  <section>
+				<h1>Challenges</h1>
+				<aside class="notes">
+				  Ask: "What do you think are challenges to building this?"
+				</aside>
+			  </section>
+			  <section>
+				<h1>Challenges</h1>
+				<p>Media Files</p>
+				<p>Websockets</p>
+				<p>Database</p>
+				<p>Sessions</p>
+			  </section>
+			  <section>
+				<h1>Overview</h1>
+				<img src="Topology.png" alt="Network Topology" />
+				<aside class="notes">
+				  Used ansible, let's encrypt, Digital Ocean
+				</aside>
+			  </section>
+			  <section>
+				<h1>Django</h1>
+				<p>Mostly CRUD</p>
+				<p>Treebeard, DjangoRestFrameWork</p>
+				<p>New Django Postgres features</p>
+				<aside class="notes">
+				  Text search, ArrayField
+				</aside>
+			  </section>
+			  <section>
+				<h1>Front End</h1>
+				<p>Single Page JQuery app</p>
+				<p>Choose a random api host for ajax requests</p>
+				<p>Changes api host when api is not responding</p>
+				<aside class="notes">
+				  Make sure your switching logic is correct.
+				</aside>
+			  </section>
+			  <section>
+				<h1>Bi-directional Replication (BDR)</h1>
+				<p>Postgres async Multi Master</p>
+				<p>Awesome</p>
+				<p>
+				  <a href="http://bdr-project.org/docs/stable/index.html">docs
+				  </a>
+				</p>
+				<aside class="notes">
+				  This takes care of the session when the sessioncookie is on the root domain.
+				  Is fast enough.
+				</aside>
+			  </section>
+			  <section>
+				<h1>BDR: gotchas</h1>
+				<p>
+				  Replication user
+				</p>
+				<p class="fragment">
+				  Sequences: USING BDR, UUID
+				</p>
+				<p class="fragment">
+				  <a href="https://github.com/2ndQuadrant/bdr/issues/140#issuecomment-174592039">Backups</a>
+				</p>
+				<aside class="notes">
+				  Replication user: BDR examples only show two db's on one host.
+				</aside>
+			  </section>
+			  <section>
+				<h1>DDL: limitations</h1>
+				<p>Needs a lock on all nodes</p>
+				<p>Downtime</p>
+				<p>Limitations on DDL</p>
+				<aside class="notes">
+				  Limitations: set sequence: use start with,
+				  updates and alter tables
+				</aside>
+			  </section>
+			  <section>
+				<h1>DDL and Migrations</h1>
+				<pre style="width:100%"><code class="hlsql">operations = [
+  migrations.RunSQL(
+    """
+    ALTER TABLE "backend_user" ADD COLUMN "voorkeuren" text;
+    ALTER TABLE "backend_user" ALTER COLUMN "voorkeuren" SET DEFAULT '""';
+    UPDATE "backend_user" SET "voorkeuren" = DEFAULT;
+    ALTER TABLE "backend_user" ALTER COLUMN "voorkeuren" SET NOT NULL;
+    ALTER TABLE "backend_user" ALTER COLUMN "voorkeuren" DROP DEFAULT;
+    """,
+    state_operations=[
+        migrations.AddField(
+            model_name='user',
+            name='voorkeuren',
+            field=jsonfield.fields.JSONField(default=''),
+            preserve_default=False,)])]
+				</code></pre>
+			  </section>
+			  <section>
+				<h1>CSYNC2</h1>
+				<pre><code class="hlini">group media {
+ host host1.example.com host2.example.com;
+ key /etc/csync2/csync2-media.key;
+ include /var/www/django/media;
+ auto younger;
+}				  </code></pre>
+				<p>Cronjob on both hosts:
+				  <pre><code>/usr/sbin/csync2 -xv</code></pre>
+				</p>
+			  </section>
+				<section>
+				  <h1>Django Code</h1>
+				<pre><code class="hlpython">import socket
+hostname = socket.gethostname()
+media_urls = {
+    'host1': 'https://host1.example.com/media/',
+    'host2': 'https://host2.example.com/media/'
+    }
+
+if hostname in media_urls.keys():
+    MEDIA_URL = media_urls[hostname]
+else:
+    ERROR HANDLING</code></pre>
+				</section>
+				<section>
+				  <h1>Websockets</h1>
+				  <p>Tornado</p>
+				  <p>Reconnecting websockets</p>
+				  <p>small id for initial connect</p>
+				  <p>uuid afterwards</p>
+				</section>
+				<section>
+				  <h1>That one time we were down</h1>
+				  <aside class="notes">
+					Mandrill to Sparkpost
+				  </aside>
+
+				</section>
 			</div>
 		</div>
 
